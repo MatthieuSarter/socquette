@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/base64"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -21,7 +22,10 @@ import (
 	"github.com/MatthieuSarter/socquette/internal/config"
 )
 
-const loopback = "127.0.0.1"
+const (
+	loopback        = "127.0.0.1"
+	loopbackAnyPort = "127.0.0.1:0"
+)
 
 var testHash, _ = auth.HashPassword("secret")
 
@@ -80,17 +84,21 @@ func (f *fixture) write(t *testing.T, c config.Config) {
 	_ = os.Chtimes(f.paths.Config, future, future)
 }
 
-// freePort returns a port free in both TCP and UDP (Windows reserves some UDP ranges, e.g. for Hyper-V).
+// freePort returns a port free in both TCP and UDP (Windows reserves some UDP ranges, e.g. for Hyper-V); where UDP
+// sockets can't be opened at all, a port free in TCP.
 func freePort(t *testing.T) int {
 	t.Helper()
 	for range 20 {
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		ln, err := net.Listen("tcp", loopbackAnyPort)
 		if err != nil {
 			t.Fatal(err)
 		}
 		port := ln.Addr().(*net.TCPAddr).Port
 		pc, err := net.ListenPacket("udp", ln.Addr().String())
 		_ = ln.Close()
+		if udpUnavailable(err) {
+			return port
+		}
 		if err == nil {
 			_ = pc.Close()
 			return port
@@ -98,6 +106,25 @@ func freePort(t *testing.T) int {
 	}
 	t.Fatal("no port free in both TCP and UDP")
 	return 0
+}
+
+// udpUnavailable reports whether err means this platform can't open UDP sockets at all: Wine lacks the
+// SIO_UDP_CONNRESET ioctl that Go's Windows runtime sets on every UDP socket.
+func udpUnavailable(err error) bool {
+	var se *os.SyscallError
+	return errors.As(err, &se) && se.Syscall == "wsaioctl"
+}
+
+// requireUDP skips the test where UDP sockets can't be opened.
+func requireUDP(t *testing.T) {
+	t.Helper()
+	pc, err := net.ListenPacket("udp", loopbackAnyPort)
+	if udpUnavailable(err) {
+		t.Skip("UDP sockets unavailable (Wine):", err)
+	}
+	if err == nil {
+		_ = pc.Close()
+	}
 }
 
 func httpConfig(port int) config.Config {
@@ -135,6 +162,7 @@ func proxyGet(t *testing.T, addr, target string) int {
 }
 
 func TestTickStartsEnabledProxies(t *testing.T) {
+	requireUDP(t)
 	f := newFixture(t)
 	c := httpConfig(freePort(t))
 	c.SOCKS.Enabled, c.SOCKS.Listen, c.SOCKS.Port = true, loopback, freePort(t)
@@ -204,7 +232,7 @@ func TestBindFailureKeepsOldListener(t *testing.T) {
 	c := httpConfig(freePort(t))
 	f.write(t, c)
 	f.r.tick()
-	busy, _ := net.Listen("tcp", "127.0.0.1:0")
+	busy, _ := net.Listen("tcp", loopbackAnyPort)
 	defer func() { _ = busy.Close() }()
 	old := c.HTTP.Addr()
 	c.HTTP.Port = busy.Addr().(*net.TCPAddr).Port
@@ -314,6 +342,7 @@ func TestNewLogger(t *testing.T) {
 }
 
 func TestSOCKSUDPPortBusy(t *testing.T) {
+	requireUDP(t)
 	f := newFixture(t)
 	port := freePort(t)
 	busy, err := net.ListenPacket("udp", net.JoinHostPort(loopback, strconv.Itoa(port)))

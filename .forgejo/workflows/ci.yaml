@@ -93,7 +93,7 @@ jobs:
           WINEDLLOVERRIDES: mscoree,mshtml=
         run: |
           wineboot --init
-          go test -exec wine $(go list ./internal/... | grep -vE '/internal/gui$')
+          go test -exec wine $(go list -e ./internal/... | grep -vE '/internal/gui$')
 
   release:
     name: Create a new release

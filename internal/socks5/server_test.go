@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -46,8 +47,14 @@ func startServer(t *testing.T, anonymous bool, advertise string) testServer {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var udp *net.UDPAddr
 	pc, err := net.ListenPacket("udp", loopbackAnyPort)
-	if err != nil {
+	switch {
+	case err == nil:
+		udp = pc.LocalAddr().(*net.UDPAddr)
+	case udpUnavailable(err):
+		pc = nil // TCP tests still run; UDP ones skip through requireUDP.
+	default:
 		t.Fatal(err)
 	}
 	logs := &lockedWriter{}
@@ -57,8 +64,32 @@ func startServer(t *testing.T, anonymous bool, advertise string) testServer {
 		Log:       slog.New(slog.NewTextHandler(logs, nil)),
 	}
 	go func() { _ = s.Serve(ln, pc) }()
-	t.Cleanup(func() { _ = ln.Close(); _ = pc.Close() })
-	return testServer{tcp: ln.Addr().String(), udp: pc.LocalAddr().(*net.UDPAddr), log: logs}
+	t.Cleanup(func() {
+		_ = ln.Close()
+		if pc != nil {
+			_ = pc.Close()
+		}
+	})
+	return testServer{tcp: ln.Addr().String(), udp: udp, log: logs}
+}
+
+// udpUnavailable reports whether err means this platform can't open UDP sockets at all: Wine lacks the
+// SIO_UDP_CONNRESET ioctl that Go's Windows runtime sets on every UDP socket.
+func udpUnavailable(err error) bool {
+	var se *os.SyscallError
+	return errors.As(err, &se) && se.Syscall == "wsaioctl"
+}
+
+// requireUDP skips the test where UDP sockets can't be opened.
+func requireUDP(t *testing.T) {
+	t.Helper()
+	pc, err := net.ListenPacket("udp", loopbackAnyPort)
+	if udpUnavailable(err) {
+		t.Skip("UDP sockets unavailable (Wine):", err)
+	}
+	if err == nil {
+		_ = pc.Close()
+	}
 }
 
 // handshake connects and authenticates; user "" means no authentication. It returns the conn and the auth status.
@@ -136,6 +167,7 @@ func tcpEcho(t *testing.T) Addr {
 
 func udpEcho(t *testing.T) Addr {
 	t.Helper()
+	requireUDP(t)
 	pc, err := net.ListenPacket("udp", loopbackAnyPort)
 	if err != nil {
 		t.Fatal(err)
@@ -244,6 +276,7 @@ func udpExchange(pc net.PacketConn, relay net.Addr, dst Addr, payload string) (A
 
 func associate(t *testing.T, s testServer) (net.Conn, *net.UDPAddr) {
 	t.Helper()
+	requireUDP(t)
 	c, _ := handshake(t, s.tcp, userAlice, passSecret)
 	rep, bnd := request(t, c, CmdUDPAssociate, Addr{IP: net.IPv4zero})
 	if rep != RepSucceeded {
@@ -323,6 +356,7 @@ func TestUDPFragmentDropped(t *testing.T) {
 }
 
 func TestAdvertiseAddress(t *testing.T) {
+	requireUDP(t)
 	s := startServer(t, false, "203.0.113.7")
 	c, _ := handshake(t, s.tcp, userAlice, passSecret)
 	_, bnd := request(t, c, CmdUDPAssociate, Addr{IP: net.IPv4zero})
@@ -332,6 +366,7 @@ func TestAdvertiseAddress(t *testing.T) {
 }
 
 func TestAdvertiseUnresolvable(t *testing.T) {
+	requireUDP(t)
 	s := startServer(t, false, "does-not-exist.invalid")
 	c, _ := handshake(t, s.tcp, userAlice, passSecret)
 	_, bnd := request(t, c, CmdUDPAssociate, Addr{IP: net.IPv4zero})
