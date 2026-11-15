@@ -12,6 +12,22 @@ connection while you are away. Linux works too.
 - A configuration window (French, English, Spanish; light, dark or automatic theme) that also installs Socquette as a
   Windows service and starts or stops it.
 
+## 🤖 AI Usage Disclaimer
+
+This project was built entirely via "vibe coding" using **Claude Opus 5.5**. For me this project is both motivated by
+a utilitarian point of view and an educational one: I wanted to test how I can write a complete Go app without much
+knowledge of Go and its ecosystem.
+
+As an experienced software developer with a very limited background in Go, I relied on AI assistance for the complete
+codebase, documentation included, except some paragraphs of this README file.
+
+While the project is functional and tested for its intended use case (i.e. my own personal usage), please keep in mind:
+- **Code Quality:** Parts of the implementation might not follow idiomatic Go patterns.
+- **Security & Performance:** The code has not been audited by an experienced Go engineer.
+- **Contributions:** PRs, refactoring, and idiomatic Go improvements are extremely welcome!
+
+For those reasons, I won't provide any pre-compiled binary. Build and use it at your own risk.
+
 ## Download
 
 Get `socquette-<version>-windows-x86_64.exe` (or the Linux build) from the releases page of the repository.
