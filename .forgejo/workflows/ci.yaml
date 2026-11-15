@@ -1,0 +1,151 @@
+---
+# Custom workflow: repo-linter's forgejo-workflows rule has no Go stack.
+name: Check / Release / Build / Sync
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  # Fyne (the configuration window) needs CGO, OpenGL and X11/Wayland headers on Linux.
+  LINUX_GUI_DEPS: gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
+  GOLANGCI_LINT_VERSION: v2.15.0
+  GO_WINRES_VERSION: v0.3.3
+
+jobs:
+  check-leaks:
+    name: Check for secrets in the repository
+    uses: public/workflows/.forgejo/workflows/security/gitleaks.yaml@v13
+
+  check:
+    name: Lint, test and coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Install the build dependencies and golangci-lint
+        run: |
+          # zip: used by sonar-reports-upload to archive the coverage report.
+          apt-get update && apt-get install -y --no-install-recommends ${LINUX_GUI_DEPS} zip
+          go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Format
+        run: golangci-lint fmt --diff
+      - name: Lint
+        run: golangci-lint run
+      - name: Build everything (GUI included)
+        run: go vet ./...
+      - name: Tests (race detector) and coverage (80% minimum)
+        run: |
+          mkdir -p .reports
+          # Same package sets as `just test` / `just coverage`.
+          test_pkgs=$(go list ./internal/... | grep -vE '/internal/gui$')
+          cover_pkgs=$(go list ./internal/... | grep -vE '/internal/(gui|control|assets)$' | paste -sd, -)
+          go test -race $test_pkgs
+          go test -coverpkg="$cover_pkgs" -coverprofile=.reports/coverage.out $(echo "$cover_pkgs" | tr , ' ')
+          go tool cover -func=.reports/coverage.out | awk '/^total:/ { sub("%", "", $3); \
+            if ($3 + 0 < 80) { print "coverage " $3 "% < 80%"; exit 1 } else print "coverage " $3 "%" }'
+      - name: Upload the Sonar reports
+        uses: ${{ forgejo.server_url }}/public/actions/sonar-reports-upload@v5
+
+  sonar:
+    name: Run SonarQube scan and quality gate check
+    needs: [check]
+    uses: public/workflows/.forgejo/workflows/quality/sonar-scan.yaml@v13
+    with:
+      sonar-host-url: ${{ vars.SONAR_HOST_URL }}
+      sonar-reports-artifact-name: sonar-reports
+    secrets:
+      sonar-token: ${{ secrets.SONAR_TOKEN }}
+
+  # No Windows runner: the Windows build (the one released) is cross-compiled and its tests run under Wine. Wine is
+  # close to, not identical with, Windows, but it does run the real Win32 calls of the service and console code.
+  check-windows:
+    name: Windows build and tests (Wine)
+    runs-on: ubuntu-latest
+    # The Node.js image is for actions/checkout; Debian trixie ships Wine 10.
+    container:
+      image: node:22-trixie
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Install MinGW and Wine
+        run: apt-get update && apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64 wine wine64
+      - name: Build everything for Windows (GUI included)
+        env:
+          CGO_ENABLED: "1"
+          GOOS: windows
+          CC: x86_64-w64-mingw32-gcc
+        run: go vet ./...
+      - name: Tests under Wine
+        env:
+          GOOS: windows
+          CGO_ENABLED: "0"
+          WINEDEBUG: -all
+          LC_ALL: C.UTF-8
+          # No Mono or Gecko install prompts: the tests need neither .NET nor the HTML engine.
+          WINEDLLOVERRIDES: mscoree,mshtml=
+        run: |
+          wineboot --init
+          go test -exec wine $(go list ./internal/... | grep -vE '/internal/gui$')
+
+  release:
+    name: Create a new release
+    needs: [check-leaks, sonar, check-windows]
+    uses: public/workflows/.forgejo/workflows/psr/version.yaml@v13
+    secrets:
+      git-token: ${{ secrets.RELEASE_TOKEN }}
+
+  # Mirrors the repository (branches and tags, no release binaries) to the GitHub.com and GitLab.com clones.
+  sync:
+    name: Synchronize remote repositories
+    needs: [release]
+    uses: public/workflows/.forgejo/workflows/git/sync.yaml@v13
+    with:
+      github: true
+      gitlab: true
+    secrets:
+      SYNC_GITHUB_TOKEN: ${{ secrets.SYNC_GITHUB_TOKEN }}
+      SYNC_GITLAB_TOKEN: ${{ secrets.SYNC_GITLAB_TOKEN }}
+
+  binaries:
+    name: Build and attach the binaries
+    needs: [release]
+    if: ${{ needs.release.outputs.new-version == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: v${{ needs.release.outputs.version }}
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Install the build dependencies
+        run: apt-get update && apt-get install -y --no-install-recommends ${LINUX_GUI_DEPS} gcc-mingw-w64-x86-64 jq
+      - name: Build
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          mkdir dist
+          go run "github.com/tc-hib/go-winres@${GO_WINRES_VERSION}" make --in winres/winres.json --arch amd64 \
+            --product-version "${VERSION}" --file-version "${VERSION}"
+          CGO_ENABLED=1 GOOS=windows CC=x86_64-w64-mingw32-gcc \
+            go build -trimpath -ldflags "-s -w -H windowsgui" -o "dist/socquette-${VERSION}-windows-x86_64.exe" .
+          CGO_ENABLED=1 go build -trimpath -ldflags "-s -w" -o "dist/socquette-${VERSION}-linux-x86_64" .
+      - name: Attach to the release
+        env:
+          TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          API: ${{ forgejo.server_url }}/api/v1/repos/${{ forgejo.repository }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          id=$(curl -sSf -H "Authorization: token ${TOKEN}" "${API}/releases/tags/v${VERSION}" | jq -r .id)
+          for file in dist/*; do
+            curl -sSf -H "Authorization: token ${TOKEN}" -F "attachment=@${file}" \
+              "${API}/releases/${id}/assets?name=$(basename "${file}")" > /dev/null
+          done

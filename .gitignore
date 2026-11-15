@@ -1,0 +1,28 @@
+/socquette
+/socquette.exe
+*.syso
+socquette.toml
+socquette.log
+socquette.pid
+.superpowers/
+
+# BEGIN REPO-LINTER DEFINED ENTRIES
+*.egg-info
+*.py[cod]
+.env
+.env.*
+!.env.sample
+.idea
+.mypy_cache
+.pytest_cache
+.reports
+.ruff_cache
+.uv
+.venv
+__pycache__
+build
+dist
+node_modules
+temp
+vendor
+# END REPO-LINTER DEFINED ENTRIES

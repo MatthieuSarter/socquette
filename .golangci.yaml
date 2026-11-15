@@ -1,0 +1,28 @@
+---
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - errorlint
+    - gosec
+    - lll
+    - misspell
+    - revive
+  settings:
+    lll:
+      line-length: 120
+      tab-width: 4
+  exclusions:
+    rules:
+      # Tests build protocol messages from small literals and read their own temporary files.
+      - path: _test\.go
+        linters: [gosec]
+      # UI labels such as "Password" are not credentials.
+      - path: internal/i18n/
+        text: G101
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

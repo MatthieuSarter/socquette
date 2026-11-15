@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+result=0
+
+if [ ! -d .githooks/pre-commit.d ]; then
+  echo "No pre-commit.d directory found. Skipping."
+  exit 0
+fi
+
+while read -r script; do
+  echo "Running script: $script"
+  if ! /usr/bin/env bash "$script"; then
+    echo "Script $script failed."
+    result=1
+  fi
+done < <(find .githooks/pre-commit.d -type f -name "*.sh")
+
+exit $result

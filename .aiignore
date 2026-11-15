@@ -1,0 +1,19 @@
+# BEGIN REPO-LINTER DEFINED ENTRIES
+*.egg-info
+*.py[cod]
+.env
+.env.*
+!.env.sample
+.git
+.idea
+.mypy_cache
+.pytest_cache
+.reports
+.ruff_cache
+.uv
+.venv
+__pycache__
+build
+dist
+temp
+# END REPO-LINTER DEFINED ENTRIES

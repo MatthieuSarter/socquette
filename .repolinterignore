@@ -1,0 +1,5 @@
+# BEGIN REPO-LINTER DEFINED ENTRIES
+# Claude Code worktrees: full nested checkouts of the repository, only excluded by .git/info/exclude, which
+# repo-linter doesn't read, so their subprojects would be linted as part of this repository.
+.claude/worktrees/
+# END REPO-LINTER DEFINED ENTRIES

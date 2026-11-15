@@ -1,0 +1,41 @@
+[semantic_release]
+commit_message = "🔖 Version {version}"
+build_command = "bash .psr/build.sh"
+commit_parser = "conventional"
+allow_zero_version = true
+tag_format = "v{version}"
+add_partial_tags = true
+version_variables = ["internal/version/version.go:Version", "sonar-project.properties:sonar.projectVersion"]
+
+[semantic_release.branches.main]
+match = "main"
+prerelease_token = "rc"
+prerelease = false
+
+[semantic_release.branches.other]
+match = "*"
+prerelease_token = "alpha"
+prerelease = true
+
+[semantic_release.changelog]
+exclude_commit_patterns = [
+  '''chore(?:\([^)]*?\))?: .+''',
+  '''ci(?:\([^)]*?\))?: .+''',
+  '''refactor(?:\([^)]*?\))?: .+''',
+  '''style(?:\([^)]*?\))?: .+''',
+  '''test(?:\([^)]*?\))?: .+''',
+  '''build\((?!deps\): .+)''',
+]
+mode = "init"
+
+[semantic_release.commit_author]
+env = "GIT_COMMIT_AUTHOR"
+default = "Matthieu Sarter <matthieu@sarter.fr>"
+
+[semantic_release.remote]
+type = "gitea"
+domain = { env = "FORGEJO_SERVER_URL" }
+token = { env = "GIT_TOKEN" }
+
+[semantic_release.publish]
+upload_to_vcs_release = false
