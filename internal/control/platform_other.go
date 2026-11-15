@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"syscall"
 
 	"github.com/kardianos/service"
@@ -46,4 +47,41 @@ func ownProcess(pid int) bool {
 	}
 	exe, err := os.Executable()
 	return err == nil && target == exe
+}
+
+func firewallAvailable() error {
+	if _, err := exec.LookPath("ufw"); err != nil {
+		return ErrNoFirewall
+	}
+	return nil
+}
+
+// applyFirewall replaces the ufw rules commented "Socquette" with rules.
+func applyFirewall(rules []FirewallRule) error {
+	if err := firewallAvailable(); err != nil {
+		return err
+	}
+	status, err := ufw("status", "numbered")
+	if err != nil {
+		return err
+	}
+	for _, n := range UfwRuleNumbers(status) {
+		if _, err := ufw("--force", "delete", strconv.Itoa(n)); err != nil {
+			return err
+		}
+	}
+	for _, r := range rules {
+		if _, err := ufw("allow", fmt.Sprintf("%d/%s", r.Port, r.Proto), "comment", firewallRuleName); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ufw(args ...string) (string, error) {
+	out, err := exec.Command("ufw", args...).CombinedOutput() //nolint:gosec // Fixed ufw subcommands, built here.
+	if err != nil {
+		return "", fmt.Errorf("ufw %v: %w: %s", args, err, out)
+	}
+	return string(out), nil
 }

@@ -35,6 +35,7 @@ const (
 	Uninstall Action = "uninstall"
 	Start     Action = "start"
 	Stop      Action = "stop"
+	Firewall  Action = "firewall" // replace the firewall rules with those the saved configuration needs
 )
 
 // ErrCancelled is returned when the user declines the elevation prompt.
@@ -100,9 +101,12 @@ func RunServe(paths config.Paths) error {
 	return nil
 }
 
-// Do performs a service action in this process, which must have admin (root) rights. Install also starts the
-// service.
+// Do performs a service (or firewall) action in this process, which must have admin (root) rights. Install also
+// starts the service.
 func Do(a Action, paths config.Paths) error {
+	if a == Firewall {
+		return configureFirewall(paths)
+	}
 	dir, err := filepath.Abs(paths.Dir)
 	if err != nil {
 		return err
@@ -138,6 +142,12 @@ func Do(a Action, paths config.Paths) error {
 // Request performs a service action from the unprivileged UI, by running `socquette --service <a> --conf <dir>`
 // with elevated rights (UAC prompt on Windows) and waiting for it.
 func Request(a Action, paths config.Paths) error {
+	if a == Firewall {
+		// Checked here too, so the UI gets ErrNoFirewall itself rather than a failed subprocess.
+		if err := firewallAvailable(); err != nil {
+			return err
+		}
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return err

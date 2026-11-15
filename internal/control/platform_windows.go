@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -117,4 +118,35 @@ func ownProcess(pid int) bool {
 	}
 	exe, err := os.Executable()
 	return err == nil && strings.EqualFold(filepath.Clean(windows.UTF16ToString(buf[:n])), filepath.Clean(exe))
+}
+
+func firewallAvailable() error { return nil }
+
+// applyFirewall replaces the "Socquette" inbound rules of the Windows firewall with rules, each limited to this
+// executable.
+func applyFirewall(rules []FirewallRule) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	// Fails when there is no rule yet, which is fine.
+	_ = netsh(fmt.Sprintf(`advfirewall firewall delete rule name="%s"`, firewallRuleName))
+	for _, r := range rules {
+		if err := netsh(fmt.Sprintf(`advfirewall firewall add rule name="%s" dir=in action=allow protocol=%s `+
+			`localport=%d program="%s"`, firewallRuleName, r.Proto, r.Port, exe)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// netsh runs netsh with args as its literal command line (Go's argument quoting would put the quotes around the
+// whole program=... token, which netsh doesn't read), without a console window.
+func netsh(args string) error {
+	cmd := exec.Command("netsh")
+	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: "netsh " + args, CreationFlags: windows.CREATE_NO_WINDOW}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("netsh %s: %w: %s", args, err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }

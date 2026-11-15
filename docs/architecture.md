@@ -6,7 +6,7 @@ One Go module, one binary. `main.go` dispatches on the command line:
 |-----------------------------------------|----------------------------------------------------------------|
 | `socquette`                             | `internal/gui`: the Fyne configuration window                  |
 | `socquette --serve`                     | `internal/control.RunServe` → `internal/server.Run`            |
-| `socquette --service <action> --conf <dir>` | `internal/control.Do`: install/uninstall/start/stop the service (hidden, run elevated by the window) |
+| `socquette --service <action> --conf <dir>` | `internal/control.Do`: install/uninstall/start/stop the service, or set the firewall rules (hidden, run elevated by the window) |
 | `socquette --version`                   | prints `internal/version.Version`                              |
 
 ## Packages
@@ -61,6 +61,10 @@ prompt) as `--service <action> --conf <dir>`, since an elevated process doesn't 
 The service definition sets `SOCQUETTE_CONF` so the service finds the configuration whatever its working directory.
 Service status is read with query-only rights, which every user has. Without the service, the window starts a
 detached `--serve` process and tracks it through `socquette.pid`.
+
+The `firewall` action takes the same path: it reads the saved configuration and replaces the inbound rules named
+"Socquette" (`netsh advfirewall`, limited to the executable) or commented "Socquette" (`ufw`, on Linux) with one rule
+per port that an enabled, non-loopback proxy needs.
 
 The Windows build is a GUI program (no console window on double-click); with arguments, it attaches to the parent
 console so `--serve` and `--version` print there.

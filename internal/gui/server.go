@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/dialog"
 
 	"github.com/MatthieuSarter/socquette/internal/control"
 )
@@ -43,7 +44,7 @@ func (u *ui) updateStatus() {
 	for _, b := range []interface {
 		Enable()
 		Disable()
-	}{u.startBtn, u.serviceBtn} {
+	}{u.startBtn, u.serviceBtn, u.firewallBtn} {
 		if u.busy {
 			b.Disable()
 		} else {
@@ -90,4 +91,22 @@ func (u *ui) toggleService() {
 		return
 	}
 	u.run(func() error { return control.Request(control.Install, paths) })
+}
+
+// configureFirewall opens the ports of the saved configuration, so pending edits are saved first.
+func (u *ui) configureFirewall() {
+	if u.dirty {
+		u.save()
+		if u.dirty {
+			return // invalid configuration or pending confirmation: save() is showing why
+		}
+	}
+	paths, title, done := u.paths, u.s.ConfigureFirewall, u.s.FirewallDone
+	u.run(func() error {
+		err := control.Request(control.Firewall, paths)
+		if err == nil {
+			fyne.Do(func() { dialog.ShowInformation(title, done, u.win) })
+		}
+		return err
+	})
 }

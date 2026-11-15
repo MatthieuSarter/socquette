@@ -11,6 +11,10 @@ Run `socquette` without arguments (double-click on Windows). The window edits `s
   - **Install service / Uninstall service**: installs Socquette as a Windows service that starts with Windows (and
     starts it right away), or removes it. Installing stops a background server first. The service reads the
     configuration of the folder the window was using.
+  - **Configure firewall**: allows the ports of the enabled proxies (HTTP in TCP, SOCKS5 in TCP and UDP) through the
+    Windows firewall, in rules named "Socquette" limited to this program (Windows asks for administrator rights). Each
+    click replaces the previous rules, so click it again after changing a port. Pending changes are saved first. On
+    Linux it does the same with `ufw` (rules commented "Socquette"); without ufw, open the ports by hand.
 - **HTTP proxy / SOCKS5 proxy**: enable each proxy, choose the address to listen on (the list suggests all interfaces,
   loopback and this PC's addresses; you can type another) and the port. **Anonymous access** lets anyone use the proxy
   without a password: the window asks for confirmation, since an open proxy on the Internet is quickly found and
@@ -35,7 +39,7 @@ On Linux, the window installs a systemd unit; it needs to run as root for that (
 
 1. On your router, forward the proxy ports to the PC running Socquette. For SOCKS5, forward the port in **TCP and
    UDP** (the UDP relay uses the same port number).
-2. Allow the ports in the Windows firewall if Windows doesn't ask on first start.
+2. Allow the ports in the firewall: **Configure firewall** in the window.
 3. If your public IP changes, use a dynamic DNS name to reach it.
 
 ### UDP behind a router

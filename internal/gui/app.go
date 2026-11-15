@@ -42,6 +42,7 @@ type ui struct {
 	statusLabel *widget.Label
 	startBtn    *widget.Button
 	serviceBtn  *widget.Button
+	firewallBtn *widget.Button
 	usersBox    *fyne.Container
 	state       control.State
 	busy        bool
@@ -83,8 +84,9 @@ func (u *ui) build() fyne.CanvasObject {
 	u.statusLabel = widget.NewLabel("")
 	u.startBtn = widget.NewButton("", u.toggleServer)
 	u.serviceBtn = widget.NewButton("", u.toggleService)
+	u.firewallBtn = widget.NewButton(u.s.ConfigureFirewall, u.configureFirewall)
 	status := container.NewHBox(widget.NewLabelWithStyle(u.s.Server, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		u.statusLabel, layout.NewSpacer(), u.startBtn, u.serviceBtn)
+		u.statusLabel, layout.NewSpacer(), u.startBtn, u.serviceBtn, u.firewallBtn)
 
 	proxies := container.NewGridWithColumns(2, u.httpCard(), u.socksCard())
 
@@ -191,6 +193,7 @@ func (u *ui) errText(err error) string {
 		{config.ErrInvalidAdvertise, u.s.ErrInvalidAdvertise},
 		{config.ErrSameAddress, u.s.ErrSameAddress},
 		{control.ErrCancelled, u.s.ElevationCancelled},
+		{control.ErrNoFirewall, u.s.ErrNoFirewall},
 	}
 	var lines []string
 	for _, k := range known {

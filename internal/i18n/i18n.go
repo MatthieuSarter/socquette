@@ -28,6 +28,7 @@ type Strings struct {
 
 	Server, ServiceRunning, ServiceStopped, BackgroundRunning, Stopped string
 	Start, Stop, InstallService, UninstallService                      string
+	ConfigureFirewall, FirewallDone                                    string
 
 	HTTPProxy, SOCKSProxy, Enabled, Listen, Port, Anonymous, AdvertiseAddress, AdvertiseHint string
 	AnonymousWarningTitle, AnonymousWarning                                                  string
@@ -37,7 +38,7 @@ type Strings struct {
 	Save, Saved, Unsaved, ConfigFileF string
 
 	Error, ErrPasswordMismatch, ErrPasswordEmpty, ErrNameEmpty, ErrNameTaken, ErrInvalidPort, ElevationCancelled string
-	ErrInvalidListen, ErrInvalidAdvertise, ErrSameAddress, ErrOther                                              string
+	ErrInvalidListen, ErrInvalidAdvertise, ErrSameAddress, ErrNoFirewall, ErrOther                               string
 }
 
 var translations = map[Lang]Strings{
@@ -47,8 +48,12 @@ var translations = map[Lang]Strings{
 		Server: "Serveur", ServiceRunning: "en marche (service)", ServiceStopped: "arrêté (service installé)",
 		BackgroundRunning: "en marche (arrière-plan)", Stopped: "arrêté",
 		Start: "Démarrer", Stop: "Arrêter", InstallService: "Installer le service",
-		UninstallService: "Désinstaller le service",
-		HTTPProxy:        "Proxy HTTP", SOCKSProxy: "Proxy SOCKS5", Enabled: "Activé", Listen: "Écoute", Port: "Port",
+		UninstallService:  "Désinstaller le service",
+		ConfigureFirewall: "Configurer le pare-feu",
+		FirewallDone: "Le pare-feu autorise maintenant les ports des proxys activés. Après un changement de port, " +
+			"cliquez à nouveau sur ce bouton.",
+		ErrNoFirewall: "ufw n'est pas installé : ouvrez les ports dans votre pare-feu à la main.",
+		HTTPProxy:     "Proxy HTTP", SOCKSProxy: "Proxy SOCKS5", Enabled: "Activé", Listen: "Écoute", Port: "Port",
 		Anonymous: "Accès anonyme", AdvertiseAddress: "Adresse publique (UDP)",
 		AdvertiseHint:         "IP ou nom d'hôte de la box",
 		AnonymousWarningTitle: "Accès anonyme",
@@ -78,7 +83,11 @@ var translations = map[Lang]Strings{
 		Server: "Server", ServiceRunning: "running (service)", ServiceStopped: "stopped (service installed)",
 		BackgroundRunning: "running (background)", Stopped: "stopped",
 		Start: "Start", Stop: "Stop", InstallService: "Install service", UninstallService: "Uninstall service",
-		HTTPProxy: "HTTP proxy", SOCKSProxy: "SOCKS5 proxy", Enabled: "Enabled", Listen: "Listen", Port: "Port",
+		ConfigureFirewall: "Configure firewall",
+		FirewallDone: "The firewall now allows the ports of the enabled proxies. Click this button again " +
+			"after changing a port.",
+		ErrNoFirewall: "ufw isn't installed: open the ports in your firewall by hand.",
+		HTTPProxy:     "HTTP proxy", SOCKSProxy: "SOCKS5 proxy", Enabled: "Enabled", Listen: "Listen", Port: "Port",
 		Anonymous: "Anonymous access", AdvertiseAddress: "Public address (UDP)",
 		AdvertiseHint:         "Router IP or host name",
 		AnonymousWarningTitle: "Anonymous access",
@@ -107,6 +116,10 @@ var translations = map[Lang]Strings{
 		Server: "Servidor", ServiceRunning: "en marcha (servicio)", ServiceStopped: "detenido (servicio instalado)",
 		BackgroundRunning: "en marcha (segundo plano)", Stopped: "detenido",
 		Start: "Iniciar", Stop: "Detener", InstallService: "Instalar el servicio",
+		ConfigureFirewall: "Configurar el cortafuegos",
+		FirewallDone: "El cortafuegos ahora permite los puertos de los proxies activados. Tras cambiar un puerto, " +
+			"vuelva a pulsar este botón.",
+		ErrNoFirewall:    "ufw no está instalado: abra los puertos en su cortafuegos manualmente.",
 		UninstallService: "Desinstalar el servicio",
 		HTTPProxy:        "Proxy HTTP", SOCKSProxy: "Proxy SOCKS5", Enabled: "Activado", Listen: "Escucha",
 		Port: "Puerto", Anonymous: "Acceso anónimo", AdvertiseAddress: "Dirección pública (UDP)",
