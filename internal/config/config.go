@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,6 +22,8 @@ var (
 	ErrInvalidPort      = errors.New("not a port in 1-65535")
 	ErrInvalidAdvertise = errors.New("neither an IP address nor a host name")
 	ErrSameAddress      = errors.New("http and socks listen on the same address")
+	ErrInvalidNetwork   = errors.New("neither an IP address nor a CIDR subnet")
+	ErrNoAddresses      = errors.New("no address")
 )
 
 // HTTP is the [http] section: the HTTP proxy listener.
@@ -49,11 +52,20 @@ type User struct {
 	SOCKS        bool   `toml:"socks"`
 }
 
+// Network is one [[networks]] entry: clients whose source address is in Addresses are accepted without credentials.
+type Network struct {
+	Name      string   `toml:"name"`
+	Addresses []string `toml:"addresses"` // IPs or CIDR subnets, IPv4 or IPv6
+	HTTP      bool     `toml:"http"`
+	SOCKS     bool     `toml:"socks"`
+}
+
 // Config is the whole socquette.toml file.
 type Config struct {
-	HTTP  HTTP   `toml:"http"`
-	SOCKS SOCKS  `toml:"socks"`
-	Users []User `toml:"users"`
+	HTTP     HTTP      `toml:"http"`
+	SOCKS    SOCKS     `toml:"socks"`
+	Users    []User    `toml:"users"`
+	Networks []Network `toml:"networks,omitempty"`
 }
 
 // Defaults returns the configuration used when the file or some of its keys are missing.
@@ -89,6 +101,28 @@ func Marshal(c Config) ([]byte, error) {
 		return nil, fmt.Errorf("marshal: %w", err)
 	}
 	return data, nil
+}
+
+// ParseNetwork parses an IP or a CIDR subnet; a bare IP is a /32 (IPv4) or /128 (IPv6) subnet. IPv4-mapped IPv6
+// addresses are taken as IPv4, as client addresses are.
+func ParseNetwork(s string) (netip.Prefix, error) {
+	s = strings.TrimSpace(s)
+	if !strings.Contains(s, "/") {
+		ip, err := netip.ParseAddr(s)
+		if err != nil || ip.Zone() != "" {
+			return netip.Prefix{}, fmt.Errorf("%q: %w", s, ErrInvalidNetwork)
+		}
+		ip = ip.Unmap()
+		return netip.PrefixFrom(ip, ip.BitLen()), nil
+	}
+	p, err := netip.ParsePrefix(s)
+	if err != nil {
+		return netip.Prefix{}, fmt.Errorf("%q: %w", s, ErrInvalidNetwork)
+	}
+	if p.Addr().Is4In6() && p.Bits() >= 96 {
+		p = netip.PrefixFrom(p.Addr().Unmap(), p.Bits()-96)
+	}
+	return p.Masked(), nil
 }
 
 var hostLabel = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
@@ -144,5 +178,28 @@ func Validate(c Config) error {
 			errs = append(errs, fmt.Errorf("users[%d].password_hash: empty", i))
 		}
 	}
-	return errors.Join(errs...)
+	return errors.Join(append(errs, validateNetworks(c.Networks)...)...)
+}
+
+func validateNetworks(networks []Network) []error {
+	var errs []error
+	seen := map[string]bool{}
+	for i, n := range networks {
+		switch {
+		case n.Name == "":
+			errs = append(errs, fmt.Errorf("networks[%d].name: %w", i, ErrNameEmpty))
+		case seen[n.Name]:
+			errs = append(errs, fmt.Errorf("networks[%d].name %q: %w", i, n.Name, ErrNameTaken))
+		}
+		seen[n.Name] = true
+		if len(n.Addresses) == 0 {
+			errs = append(errs, fmt.Errorf("networks[%d].addresses: %w", i, ErrNoAddresses))
+		}
+		for j, a := range n.Addresses {
+			if _, err := ParseNetwork(a); err != nil {
+				errs = append(errs, fmt.Errorf("networks[%d].addresses[%d] %w", i, j, err))
+			}
+		}
+	}
+	return errs
 }

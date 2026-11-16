@@ -21,7 +21,8 @@ under **EUPL-1.2** **(owner)**.
 - HTTP proxy: `CONNECT` tunnels (HTTPS) and plain HTTP forwarding **(Claude's call, accepted)**.
 - Configuration in a TOML file, hot-reloaded by the running server when the UI (or anyone) changes it **(owner)**.
 - The UI edits: HTTP proxy on/off, listen address, port, anonymous access; same for SOCKS (plus the UDP advertised
-  address, §5.3); a list of users with a password and, per user, an HTTP right and a SOCKS right **(owner)**.
+  address, §5.3); a list of users with a password and, per user, an HTTP right and a SOCKS right **(owner)**; a list
+  of trusted networks (IPs / CIDR subnets accepted without credentials), with the same rights **(owner, issue #1)**.
 - The UI installs/uninstalls the server as a Windows service, and starts/stops the server — the service when installed,
   a background process otherwise **(owner)**.
 - Can sit behind a TLS-terminating TCP stream (e.g. a Nginx Proxy Manager "Stream") for the HTTP proxy with no change to
@@ -32,8 +33,9 @@ under **EUPL-1.2** **(owner)**.
 **Non-goals:**
 
 - TLS on Socquette's own listeners (owner chose plain-text auth for v1; TLS can come from a reverse proxy for HTTP).
-- SOCKS5 `BIND`, SOCKS4/4a, GSSAPI auth, PROXY protocol, per-user bandwidth limits, IP allow-lists, fail2ban-style
-  banning **(Claude's call, YAGNI)**.
+- SOCKS5 `BIND`, SOCKS4/4a, GSSAPI auth, PROXY protocol, per-user bandwidth limits, fail2ban-style banning
+  **(Claude's call, YAGNI)**. (IP allow-lists were one too, until issue #1: see trusted networks, §5.1.)
+- Trusting `X-Forwarded-For` or the PROXY protocol for the client address: a trusted network matches the TCP peer.
 - Interrupting open connections when a user is removed or loses a right: changes apply to new connections only
   **(Claude's call, accepted)**.
 - Log rotation (the log file just grows; ponytail note, add rotation if it ever matters) **(Claude's call)**.
@@ -81,6 +83,12 @@ name = "alice"
 password_hash = "$2a$10$..." # bcrypt
 http = true
 socks = true
+
+[[networks]]                 # trusted network: clients from these addresses need no credentials
+name = "lan"                 # shown in the log's user column
+addresses = ["192.168.1.0/24", "fd00::/8", "203.0.113.7"] # bare IP = /32 or /128
+http = true
+socks = true
 ```
 
 - Missing file: the server runs with both proxies disabled and keeps polling; the UI starts from defaults (both
@@ -88,7 +96,8 @@ socks = true
 - Validation (pure function): ports 1–65535; `listen` must parse as an IP address; `advertise_address` is empty, an
   IP address or a host name;
   HTTP and SOCKS can't share the same listen address + port; user names unique and non-empty; name and password at
-  most 255 bytes (RFC 1929 limit); no user with an empty hash.
+  most 255 bytes (RFC 1929 limit); no user with an empty hash; network names unique and non-empty, at least one
+  address per network, each an IP or a CIDR subnet (`netip.ParseAddr` / `netip.ParsePrefix`).
 - The UI writes the file atomically (temp file in the same directory + rename) so the server never reads a half-written
   file.
 
@@ -112,12 +121,18 @@ the file atomically, which breaks per-file fsnotify watches). On change:
 - A proxy with `anonymous = true` also accepts unauthenticated clients; authenticated clients still work and are logged
   under their name; wrong credentials are still rejected, not downgraded to anonymous **(Claude's call)**.
 - A user without the right for a proxy is rejected by that proxy like a wrong password.
-- Log line per connection: time, proxy, client address, user (or `-`), destination, result; and every auth failure
+- **Trusted networks** (issue #1) **(owner: named entries; wrong credentials rejected)**: a client that sends no
+  credentials is accepted when its TCP source address (unmapped from `::ffff:a.b.c.d`, zone dropped) is in a network
+  with the right for that proxy, logged under the first such network's name; else it falls back to `anonymous`. A
+  client that sends credentials is judged on them only, so wrong credentials are rejected even from a trusted network.
+  The decision is `auth.Authenticator.Unauthenticated`, a pure function over the parsed prefixes.
+- Log line per connection: time, proxy, client address, user (network name, or `-` when anonymous), destination, result; and every auth failure
   **(Claude's call)**. Log to `socquette.log` and to stderr.
 
 ### 5.2 HTTP proxy
 
-- `Proxy-Authorization: Basic …`; missing or bad credentials → `407` with `Proxy-Authenticate: Basic realm="Socquette"`.
+- `Proxy-Authorization: Basic …`; bad credentials, or missing ones outside a trusted network on a non-anonymous proxy
+  → `407` with `Proxy-Authenticate: Basic realm="Socquette"`.
 - `CONNECT host:port`: hijack the client connection, dial the target, answer `200`, then copy both ways.
 - Other methods (absolute-form URL): forward with an `http.Transport` that has **no** upstream proxy (never read
   `HTTP_PROXY` from the environment), stripping hop-by-hop headers and `Proxy-Authorization`.
@@ -125,8 +140,8 @@ the file atomically, which breaks per-file fsnotify watches). On change:
 
 ### 5.3 SOCKS5 proxy (RFC 1928 + RFC 1929)
 
-- Methods: `0x02` (username/password) always offered when users exist; `0x00` (no auth) only when `anonymous = true`.
-  No acceptable method → `0xFF` and close.
+- Methods: `0x02` (username/password) always offered when users exist; `0x00` (no auth) only when `anonymous = true`
+  or the client's address is in a trusted network with the SOCKS right. No acceptable method → `0xFF` and close.
 - Commands: `CONNECT` (`0x01`); `UDP ASSOCIATE` (`0x03`); `BIND` → reply `0x07` (command not supported).
 - Address types: IPv4, IPv6, domain name (resolved by the server).
 - **UDP relay**, built for a server behind a home NAT **(Claude's call, accepted)**:
@@ -136,7 +151,8 @@ the file atomically, which breaks per-file fsnotify watches). On change:
     resolved to an IP at each `UDP ASSOCIATE` since home IPs change) and the SOCKS port; empty → `0.0.0.0`, which
     most clients read as "the address you connected to".
   - An association belongs to the authenticated TCP control connection that created it and dies with it. Datagrams
-    are accepted only from that client's IP; the client's UDP source port is learned from its first datagram when the
+    are accepted only from that client's IP (so a trusted network's client authorizes its own datagrams only, through
+    its TCP control connection); the client's UDP source port is learned from its first datagram when the
     request said port 0.
   - Each association gets its own outbound UDP socket, so replies from targets map back to the right client; replies
     are wrapped in the SOCKS UDP header and sent to the client from the relay socket.
@@ -183,6 +199,10 @@ CI). Layout sketch **(Claude's call)**:
 │ Name        HTTP   SOCKS                                            │
 │ alice       [x]    [x]     [Change password]  [Delete]              │
 │ [+ Add user]                                                        │
+├─ Trusted networks ──────────────────────────────────────────────────┤
+│ Name   Addresses             HTTP  SOCKS                            │
+│ lan    192.168.1.0/24, …     [x]   [x]   [Edit addresses] [Delete]  │
+│ [+ Add network]                                                     │
 ├─────────────────────────────────────────────────────────────────────┤
 │ C:\…\socquette.toml                        (unsaved changes) [Save] │
 └─────────────────────────────────────────────────────────────────────┘

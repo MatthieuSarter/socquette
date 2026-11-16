@@ -22,6 +22,9 @@ Run `socquette` without arguments (double-click on Windows). The window edits `s
 - **Public address (UDP)**: see [UDP behind a router](#udp-behind-a-router).
 - **Users**: add users with a password (typed twice), choose who may use which proxy, change a password, delete a
   user. Passwords are stored hashed and can't be displayed again.
+- **Trusted networks**: addresses (IPs or CIDR subnets such as `192.168.1.0/24`) whose clients may use the HTTP and/or
+  SOCKS proxy without a password — your LAN, a VPN, a fixed remote IP, or a client that can't authenticate. Only add
+  addresses you control: a too-wide subnet turns the proxy into an open proxy for that range.
 - **Language** and **Theme** (automatic follows Windows) are remembered.
 
 ## Running without the window
@@ -85,4 +88,5 @@ stream {
 
 Clients then connect over TLS: `curl --proxy https://alice:password@my-home.example.org:8443 https://example.com`, or a
 PAC file returning `HTTPS my-home.example.org:8443` in Firefox or Chrome. Socquette then logs the reverse proxy's
-address as the client. This doesn't apply to SOCKS5 (clients don't speak SOCKS over TLS) nor to UDP.
+address as the client, so a trusted network containing the reverse proxy's address lets every client in without a
+password. This doesn't apply to SOCKS5 (clients don't speak SOCKS over TLS) nor to UDP.

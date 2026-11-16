@@ -63,10 +63,11 @@ func TestRemoveHopByHop(t *testing.T) {
 	}
 }
 
-func startProxy(t *testing.T, anonymous bool) *url.URL {
+func startProxy(t *testing.T, anonymous bool, networks ...config.Network) *url.URL {
 	t.Helper()
 	c := config.Defaults()
 	c.HTTP.Anonymous = anonymous
+	c.Networks = networks
 	c.Users = []config.User{
 		{Name: "alice", PasswordHash: testHash, HTTP: true},
 		{Name: "bob", PasswordHash: testHash, SOCKS: true},
@@ -211,6 +212,25 @@ func TestHTTPAnonymous(t *testing.T) {
 func TestHTTPAnonymousWrongCreds407(t *testing.T) {
 	p, o := startProxy(t, true), origin(t)
 	if resp := get(t, p, o.URL, basic("alice", "nope")); resp.StatusCode != http.StatusProxyAuthRequired {
+		t.Errorf(statusFmt, resp.StatusCode)
+	}
+}
+
+func TestHTTPTrustedNetwork(t *testing.T) {
+	o := origin(t)
+	p := startProxy(t, false, config.Network{Name: "lan", Addresses: []string{"127.0.0.0/8", "::1"}, HTTP: true})
+	if resp := get(t, p, o.URL, ""); resp.StatusCode != http.StatusOK {
+		t.Errorf(statusFmt, resp.StatusCode)
+	}
+	if resp := get(t, p, o.URL, basic("alice", "nope")); resp.StatusCode != http.StatusProxyAuthRequired {
+		t.Errorf("wrong credentials from a trusted network: "+statusFmt, resp.StatusCode)
+	}
+}
+
+func TestHTTPTrustedNetworkWithoutRight407(t *testing.T) {
+	o := origin(t)
+	p := startProxy(t, false, config.Network{Name: "lan", Addresses: []string{"127.0.0.0/8", "::1"}, SOCKS: true})
+	if resp := get(t, p, o.URL, ""); resp.StatusCode != http.StatusProxyAuthRequired {
 		t.Errorf(statusFmt, resp.StatusCode)
 	}
 }

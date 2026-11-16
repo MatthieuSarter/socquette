@@ -76,8 +76,9 @@ func ReadGreeting(r io.Reader) ([]byte, error) {
 }
 
 // ChooseMethod picks the authentication method: username/password when users exist and the client offers it, else
-// no authentication when the proxy is anonymous and the client offers it, else MethodNone.
-func ChooseMethod(offered []byte, anonymous, haveUsers bool) byte {
+// no authentication when the client may go without credentials (anonymous proxy, trusted network) and offers it, else
+// MethodNone.
+func ChooseMethod(offered []byte, noAuth, haveUsers bool) byte {
 	has := func(m byte) bool {
 		for _, o := range offered {
 			if o == m {
@@ -89,7 +90,7 @@ func ChooseMethod(offered []byte, anonymous, haveUsers bool) byte {
 	switch {
 	case haveUsers && has(MethodUserPass):
 		return MethodUserPass
-	case anonymous && has(MethodNoAuth):
+	case noAuth && has(MethodNoAuth):
 		return MethodNoAuth
 	default:
 		return MethodNone

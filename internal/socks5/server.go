@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/netip"
 	"syscall"
 	"time"
 
@@ -54,8 +55,8 @@ func (s *Server) dial(ctx context.Context, addr string) (net.Conn, error) {
 	return d.DialContext(ctx, "tcp", addr)
 }
 
-// authenticate runs the method negotiation and, when chosen, RFC 1929; it returns the user name ("-" when
-// anonymous) and whether the client may go on.
+// authenticate runs the method negotiation and, when chosen, RFC 1929; it returns the user name (a trusted network's
+// name, "-" when anonymous) and whether the client may go on.
 func (s *Server) authenticate(c net.Conn, log *slog.Logger) (string, bool) {
 	methods, err := ReadGreeting(c)
 	if err != nil {
@@ -63,7 +64,12 @@ func (s *Server) authenticate(c net.Conn, log *slog.Logger) (string, bool) {
 		return "", false
 	}
 	a := s.Auth()
-	method := ChooseMethod(methods, a.Anonymous(auth.SOCKS), a.HasUsers(auth.SOCKS))
+	var client netip.Addr
+	if tcp, ok := c.RemoteAddr().(*net.TCPAddr); ok {
+		client = tcp.AddrPort().Addr()
+	}
+	unauthName, unauthOK := a.Unauthenticated(auth.SOCKS, client)
+	method := ChooseMethod(methods, unauthOK, a.HasUsers(auth.SOCKS))
 	if _, err := c.Write([]byte{version, method}); err != nil || method == MethodNone {
 		if method == MethodNone {
 			log.Warn("socks auth failed", "reason", "no acceptable method")
@@ -71,7 +77,7 @@ func (s *Server) authenticate(c net.Conn, log *slog.Logger) (string, bool) {
 		return "", false
 	}
 	if method == MethodNoAuth {
-		return "-", true
+		return unauthName, true
 	}
 	name, password, err := ReadUserPass(c)
 	if err != nil {

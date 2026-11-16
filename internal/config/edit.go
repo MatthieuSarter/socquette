@@ -6,12 +6,13 @@ import (
 	"net"
 	"slices"
 	"strings"
+	"unicode"
 )
 
-// Errors of the user edits, mapped to translated messages by the UI.
+// Errors of the user and network edits, mapped to translated messages by the UI.
 var (
-	ErrNameEmpty        = errors.New("empty user name")
-	ErrNameTaken        = errors.New("user name already used")
+	ErrNameEmpty        = errors.New("empty name")
+	ErrNameTaken        = errors.New("name already used")
 	ErrPasswordEmpty    = errors.New("empty password")
 	ErrPasswordMismatch = errors.New("passwords don't match")
 )
@@ -67,6 +68,58 @@ func SetPassword(c Config, name, pw1, pw2 string, hash func(string) (string, err
 // RemoveUser returns a copy of c without the named user.
 func RemoveUser(c Config, name string) Config {
 	c.Users = slices.DeleteFunc(slices.Clone(c.Users), func(u User) bool { return u.Name == name })
+	return c
+}
+
+// parseAddresses splits a comma- or space-separated list of IPs and CIDR subnets and checks each of them.
+func parseAddresses(list string) ([]string, error) {
+	addrs := strings.FieldsFunc(list, func(r rune) bool { return r == ',' || unicode.IsSpace(r) })
+	if len(addrs) == 0 {
+		return nil, ErrNoAddresses
+	}
+	for _, a := range addrs {
+		if _, err := ParseNetwork(a); err != nil {
+			return nil, err
+		}
+	}
+	return addrs, nil
+}
+
+// AddNetwork returns a copy of c with a new trusted network; addresses is a comma- or space-separated list.
+func AddNetwork(c Config, name, addresses string, http, socks bool) (Config, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return c, ErrNameEmpty
+	}
+	if slices.ContainsFunc(c.Networks, func(n Network) bool { return n.Name == name }) {
+		return c, ErrNameTaken
+	}
+	addrs, err := parseAddresses(addresses)
+	if err != nil {
+		return c, err
+	}
+	c.Networks = append(slices.Clone(c.Networks), Network{Name: name, Addresses: addrs, HTTP: http, SOCKS: socks})
+	return c, nil
+}
+
+// SetNetworkAddresses returns a copy of c where the network's addresses are replaced.
+func SetNetworkAddresses(c Config, name, addresses string) (Config, error) {
+	i := slices.IndexFunc(c.Networks, func(n Network) bool { return n.Name == name })
+	if i < 0 {
+		return c, fmt.Errorf("unknown network %q", name)
+	}
+	addrs, err := parseAddresses(addresses)
+	if err != nil {
+		return c, err
+	}
+	c.Networks = slices.Clone(c.Networks)
+	c.Networks[i].Addresses = addrs
+	return c, nil
+}
+
+// RemoveNetwork returns a copy of c without the named network.
+func RemoveNetwork(c Config, name string) Config {
+	c.Networks = slices.DeleteFunc(slices.Clone(c.Networks), func(n Network) bool { return n.Name == name })
 	return c
 }
 

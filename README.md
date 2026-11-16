@@ -7,7 +7,7 @@ connection while you are away. Linux works too.
 - SOCKS5 with `CONNECT` and `UDP ASSOCIATE`, username/password authentication (RFC 1928 / RFC 1929).
 - HTTP proxy with `CONNECT` tunnels (HTTPS) and plain HTTP forwarding, Basic authentication.
 - Users with a password and, for each, the right to use the HTTP proxy, the SOCKS proxy or both. Optional anonymous
-  access per proxy (off by default).
+  access per proxy (off by default), and trusted networks (IPs or CIDR subnets) accepted without a password.
 - Configuration in a `socquette.toml` file, applied on the fly by the running server.
 - A configuration window (French, English, Spanish; light, dark or automatic theme) that also installs Socquette as a
   Windows service and starts or stops it.

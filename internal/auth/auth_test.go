@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"net/netip"
 	"sync"
 	"testing"
 	"time"
@@ -84,7 +85,7 @@ func TestCheckFailureNotCached(t *testing.T) {
 
 func TestAnonymousWrongCredsRejected(t *testing.T) {
 	a := newTestAuth(t, true)
-	if !a.Anonymous(SOCKS) {
+	if _, ok := a.Unauthenticated(SOCKS, netip.MustParseAddr("192.0.2.1")); !ok {
 		t.Fatal("anonymous not reported")
 	}
 	if a.Check(SOCKS, "alice", "nope") {
@@ -130,5 +131,48 @@ func TestCheckBoundsConcurrentVerifies(t *testing.T) {
 	wg.Wait()
 	if peak > 2 {
 		t.Errorf("%d bcrypt checks ran at once, want at most 2", peak)
+	}
+}
+
+func TestUnauthenticated(t *testing.T) {
+	c := config.Defaults()
+	c.HTTP.Anonymous = true
+	c.Networks = []config.Network{
+		{Name: "lan", Addresses: []string{"192.168.1.0/24", "fd00::/8"}, HTTP: true, SOCKS: true},
+		{Name: "office", Addresses: []string{"203.0.113.7"}, HTTP: false, SOCKS: true},
+		{Name: "wide", Addresses: []string{"192.168.0.0/16"}, HTTP: true, SOCKS: true},
+	}
+	a := New(c)
+	tests := []struct {
+		name     string
+		proto    Proto
+		client   string
+		wantUser string
+		wantOK   bool
+	}{
+		{"ipv4 in subnet", SOCKS, "192.168.1.42", "lan", true},
+		{"ipv6 in subnet", SOCKS, "fd12::1", "lan", true},
+		{"ipv4-mapped ipv6", SOCKS, "::ffff:192.168.1.42", "lan", true},
+		{"ipv6 with zone", SOCKS, "fd12::1%eth0", "lan", true},
+		{"bare ip is a /32", SOCKS, "203.0.113.7", "office", true},
+		{"bare ip only", SOCKS, "203.0.113.8", "-", false},
+		{"no right on the proxy, next network", HTTP, "203.0.113.7", "-", true},
+		{"first matching network wins", HTTP, "192.168.1.1", "lan", true},
+		{"later network", SOCKS, "192.168.2.1", "wide", true},
+		{"no match, not anonymous", SOCKS, "198.51.100.1", "-", false},
+		{"no match, anonymous", HTTP, "198.51.100.1", "-", true},
+		{"invalid address", SOCKS, "", "-", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var client netip.Addr
+			if tt.client != "" {
+				client = netip.MustParseAddr(tt.client)
+			}
+			user, ok := a.Unauthenticated(tt.proto, client)
+			if user != tt.wantUser || ok != tt.wantOK {
+				t.Errorf("Unauthenticated() = %q, %v, want %q, %v", user, ok, tt.wantUser, tt.wantOK)
+			}
+		})
 	}
 }

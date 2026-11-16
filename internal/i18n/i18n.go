@@ -35,10 +35,13 @@ type Strings struct {
 
 	Users, NoUsers, AddUser, ChangePassword, Delete, DeleteUserF, Name, Password, ConfirmPassword string
 
+	Networks, NetworksHint, NoNetworks, AddNetwork, EditAddresses, DeleteNetworkF, Addresses, AddressesHint string
+
 	Save, Saved, Unsaved, ConfigFileF string
 
 	Error, ErrPasswordMismatch, ErrPasswordEmpty, ErrNameEmpty, ErrNameTaken, ErrInvalidPort, ElevationCancelled string
 	ErrInvalidListen, ErrInvalidAdvertise, ErrSameAddress, ErrNoFirewall, ErrOther                               string
+	ErrInvalidNetwork, ErrNoAddresses                                                                            string
 }
 
 var translations = map[Lang]Strings{
@@ -62,7 +65,14 @@ var translations = map[Lang]Strings{
 		Users: "Utilisateurs", NoUsers: "Aucun utilisateur", AddUser: "Ajouter un utilisateur",
 		ChangePassword: "Changer le mot de passe", Delete: "Supprimer", DeleteUserF: "Supprimer l'utilisateur %s ?",
 		Name: "Nom", Password: "Mot de passe", ConfirmPassword: "Confirmer le mot de passe",
-		Save: "Enregistrer", Saved: "Enregistré", Unsaved: "Modifications non enregistrées",
+		Networks:     "Réseaux de confiance",
+		NetworksHint: "Les clients de ces adresses sont acceptés sans mot de passe.",
+		NoNetworks:   "Aucun réseau", AddNetwork: "Ajouter un réseau", EditAddresses: "Modifier les adresses",
+		DeleteNetworkF: "Supprimer le réseau %s ?", Addresses: "Adresses",
+		AddressesHint:     "IP ou sous-réseaux CIDR, séparés par des virgules",
+		ErrInvalidNetwork: "Chaque adresse doit être une IP ou un sous-réseau CIDR (ex. 192.168.1.0/24).",
+		ErrNoAddresses:    "Indiquez au moins une adresse.",
+		Save:              "Enregistrer", Saved: "Enregistré", Unsaved: "Modifications non enregistrées",
 		ConfigFileF: "Configuration : %s",
 		Error:       "Erreur", ErrPasswordMismatch: "Les mots de passe ne correspondent pas.",
 		ErrPasswordEmpty: "Le mot de passe est vide.", ErrNameEmpty: "Le nom est vide.",
@@ -96,7 +106,14 @@ var translations = map[Lang]Strings{
 		Users: "Users", NoUsers: "No users", AddUser: "Add user", ChangePassword: "Change password",
 		Delete: "Delete", DeleteUserF: "Delete user %s?", Name: "Name", Password: "Password",
 		ConfirmPassword: "Confirm password",
-		Save:            "Save", Saved: "Saved", Unsaved: "Unsaved changes", ConfigFileF: "Configuration: %s",
+		Networks:        "Trusted networks",
+		NetworksHint:    "Clients from these addresses are accepted without a password.",
+		NoNetworks:      "No networks", AddNetwork: "Add network", EditAddresses: "Edit addresses",
+		DeleteNetworkF: "Delete network %s?", Addresses: "Addresses",
+		AddressesHint:     "IPs or CIDR subnets, comma-separated",
+		ErrInvalidNetwork: "Each address must be an IP or a CIDR subnet (e.g. 192.168.1.0/24).",
+		ErrNoAddresses:    "Enter at least one address.",
+		Save:              "Save", Saved: "Saved", Unsaved: "Unsaved changes", ConfigFileF: "Configuration: %s",
 		Error: "Error", ErrPasswordMismatch: "The passwords don't match.", ErrPasswordEmpty: "The password is empty.",
 		ErrNameEmpty: "The name is empty.", ErrNameTaken: "This name is already used.",
 		ErrInvalidPort:      "The port must be a number between 1 and 65535.",
@@ -130,8 +147,16 @@ var translations = map[Lang]Strings{
 		Users: "Usuarios", NoUsers: "Ningún usuario", AddUser: "Añadir usuario",
 		ChangePassword: "Cambiar la contraseña", Delete: "Eliminar", DeleteUserF: "¿Eliminar el usuario %s?",
 		Name: "Nombre", Password: "Contraseña", ConfirmPassword: "Confirmar la contraseña",
-		Save: "Guardar", Saved: "Guardado", Unsaved: "Cambios sin guardar", ConfigFileF: "Configuración: %s",
-		Error: "Error", ErrPasswordMismatch: "Las contraseñas no coinciden.",
+		Networks:     "Redes de confianza",
+		NetworksHint: "Las conexiones desde estas direcciones se aceptan sin contraseña.",
+		NoNetworks:   "Ninguna red", AddNetwork: "Añadir red", EditAddresses: "Editar las direcciones",
+		DeleteNetworkF: "¿Eliminar la red %s?", Addresses: "Direcciones",
+		AddressesHint:     "IP o subredes CIDR, separadas por comas",
+		ErrInvalidNetwork: "Cada dirección debe ser una IP o una subred CIDR (p. ej. 192.168.1.0/24).",
+		ErrNoAddresses:    "Indique al menos una dirección.",
+		Save:              "Guardar", Saved: "Guardado", Unsaved: "Cambios sin guardar",
+		ConfigFileF: "Configuración: %s",
+		Error:       "Error", ErrPasswordMismatch: "Las contraseñas no coinciden.",
 		ErrPasswordEmpty: "La contraseña está vacía.", ErrNameEmpty: "El nombre está vacío.",
 		ErrNameTaken: "Este nombre ya está en uso.", ErrInvalidPort: "El puerto debe ser un número entre 1 y 65535.",
 		ElevationCancelled:  "Operación cancelada: se denegaron los derechos de administrador.",

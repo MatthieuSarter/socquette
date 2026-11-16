@@ -44,6 +44,7 @@ type ui struct {
 	serviceBtn  *widget.Button
 	firewallBtn *widget.Button
 	usersBox    *fyne.Container
+	networksBox *fyne.Container
 	state       control.State
 	busy        bool
 }
@@ -100,7 +101,7 @@ func (u *ui) build() fyne.CanvasObject {
 	path.Truncation = fyne.TextTruncateEllipsis
 	bottom := container.NewBorder(nil, nil, nil, container.NewHBox(u.dirtyLabel, save), path)
 
-	body := container.NewVScroll(container.NewVBox(proxies, u.usersCard()))
+	body := container.NewVScroll(container.NewVBox(proxies, u.usersCard(), u.networksCard()))
 	return container.NewBorder(container.NewVBox(top, widget.NewSeparator(), status), bottom, nil, nil, body)
 }
 
@@ -192,6 +193,8 @@ func (u *ui) errText(err error) string {
 		{config.ErrInvalidListen, u.s.ErrInvalidListen},
 		{config.ErrInvalidAdvertise, u.s.ErrInvalidAdvertise},
 		{config.ErrSameAddress, u.s.ErrSameAddress},
+		{config.ErrInvalidNetwork, u.s.ErrInvalidNetwork},
+		{config.ErrNoAddresses, u.s.ErrNoAddresses},
 		{control.ErrCancelled, u.s.ElevationCancelled},
 		{control.ErrNoFirewall, u.s.ErrNoFirewall},
 	}

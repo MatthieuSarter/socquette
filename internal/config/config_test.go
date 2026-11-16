@@ -126,6 +126,13 @@ func TestValidateSentinels(t *testing.T) {
 		{func(c *Config) { c.SOCKS.Listen = "x" }, ErrInvalidListen},
 		{func(c *Config) { c.SOCKS.AdvertiseAddress = "bad host!" }, ErrInvalidAdvertise},
 		{func(c *Config) { c.HTTP.Enabled, c.SOCKS.Enabled, c.HTTP.Port = true, true, 1080 }, ErrSameAddress},
+		{func(c *Config) { c.Networks = []Network{{Name: "x", Addresses: []string{"10.0.0.0/33"}}} },
+			ErrInvalidNetwork},
+		{func(c *Config) { c.Networks = []Network{{Name: "lan"}} }, ErrNoAddresses},
+		{func(c *Config) { c.Networks = []Network{{Addresses: []string{"10.0.0.1"}}} }, ErrNameEmpty},
+		{func(c *Config) {
+			c.Networks = []Network{{Name: "a", Addresses: []string{"::1"}}, {Name: "a", Addresses: []string{"::1"}}}
+		}, ErrNameTaken},
 	}
 	for _, tt := range tests {
 		c := Defaults()
@@ -133,5 +140,42 @@ func TestValidateSentinels(t *testing.T) {
 		if err := Validate(c); !errors.Is(err, tt.want) {
 			t.Errorf("Validate() = %v, want %v", err, tt.want)
 		}
+	}
+}
+
+func TestParseNetwork(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"192.168.1.0/24", "192.168.1.0/24"},
+		{" 192.168.1.7/24 ", "192.168.1.0/24"},
+		{"10.0.0.1", "10.0.0.1/32"},
+		{"2001:db8::/32", "2001:db8::/32"},
+		{"2001:db8::1", "2001:db8::1/128"},
+		{"::ffff:10.1.2.3", "10.1.2.3/32"},
+		{"::ffff:10.0.0.0/104", "10.0.0.0/8"},
+		{"::/0", "::/0"},
+	}
+	for _, tt := range tests {
+		got, err := ParseNetwork(tt.in)
+		if err != nil || got.String() != tt.want {
+			t.Errorf("ParseNetwork(%q) = %v, %v, want %s", tt.in, got, err, tt.want)
+		}
+	}
+	for _, bad := range []string{"", "lan", "10.0.0.256", "10.0.0.0/33", "fe80::1%eth0", "10.0.0.0/"} {
+		if _, err := ParseNetwork(bad); !errors.Is(err, ErrInvalidNetwork) {
+			t.Errorf("ParseNetwork(%q) = %v, want ErrInvalidNetwork", bad, err)
+		}
+	}
+}
+
+func TestParseNetworks(t *testing.T) {
+	c, err := Parse([]byte(`
+[[networks]]
+name = "lan"
+addresses = ["192.168.1.0/24", "fd00::/8"]
+socks = true
+`))
+	want := []Network{{Name: "lan", Addresses: []string{"192.168.1.0/24", "fd00::/8"}, SOCKS: true}}
+	if err != nil || !reflect.DeepEqual(c.Networks, want) {
+		t.Errorf("networks = %+v, %v", c.Networks, err)
 	}
 }

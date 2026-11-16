@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -68,12 +69,14 @@ type Handler struct {
 	Transport http.RoundTripper // nil means a transport with no upstream proxy
 }
 
-// authorize returns the user name ("-" when anonymous) and whether the request may go on.
+// authorize returns the user name (a trusted network's name, "-" when anonymous) and whether the request may go on.
+// The client address is the TCP peer's: behind a reverse proxy, that is the reverse proxy's address.
 func (h *Handler) authorize(r *http.Request) (string, bool) {
 	a := h.Auth()
 	header := r.Header.Get("Proxy-Authorization")
 	if header == "" {
-		return "-", a.Anonymous(auth.HTTP)
+		client, _ := netip.ParseAddrPort(r.RemoteAddr) // an invalid address matches no network
+		return a.Unauthenticated(auth.HTTP, client.Addr())
 	}
 	name, password, ok := ParseProxyAuth(header)
 	return name, ok && a.Check(auth.HTTP, name, password)

@@ -95,7 +95,7 @@ func (u *ui) changePassword(name string) {
 	})
 }
 
-// form shows a dialog; on OK, apply runs and either refreshes the users or shows its error.
+// form shows a dialog; on OK, apply runs and either refreshes the users and networks or shows its error.
 func (u *ui) form(title string, items []*widget.FormItem, apply func() error) {
 	d := dialog.NewForm(title, u.s.OK, u.s.Cancel, items, func(ok bool) {
 		if !ok {
@@ -106,6 +106,7 @@ func (u *ui) form(title string, items []*widget.FormItem, apply func() error) {
 			return
 		}
 		u.refreshUsers()
+		u.refreshNetworks()
 		u.markDirty()
 	}, u.win)
 	d.Resize(fyne.NewSize(420, 0))

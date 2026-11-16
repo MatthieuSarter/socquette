@@ -14,7 +14,7 @@ One Go module, one binary. `main.go` dispatches on the command line:
 | Package              | Role                                                                                     |
 |----------------------|------------------------------------------------------------------------------------------|
 | `internal/config`    | `socquette.toml` model, validation, atomic save; pure user edits used by the window      |
-| `internal/auth`      | bcrypt credential checks, per-proxy rights, cache of successful checks                   |
+| `internal/auth`      | bcrypt credential checks, trusted networks, per-proxy rights, cache of successful checks |
 | `internal/socks5`    | SOCKS5 codec (pure) and server: `CONNECT`, `UDP ASSOCIATE`, RFC 1929                     |
 | `internal/httpproxy` | HTTP proxy handler: `CONNECT` tunnels and plain forwarding                               |
 | `internal/relay`     | bidirectional TCP copy with half-close                                                   |

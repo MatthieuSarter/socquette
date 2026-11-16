@@ -83,3 +83,56 @@ func TestListenSuggestions(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+func TestAddNetwork(t *testing.T) {
+	c, err := AddNetwork(Defaults(), " lan ", "192.168.1.0/24, fd00::/8\n10.0.0.1", true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Network{Name: "lan", Addresses: []string{"192.168.1.0/24", "fd00::/8", "10.0.0.1"}, HTTP: true}
+	if len(c.Networks) != 1 || !reflect.DeepEqual(c.Networks[0], want) {
+		t.Errorf("networks = %+v", c.Networks)
+	}
+	tests := []struct {
+		name, addrs string
+		want        error
+	}{
+		{"lan", "10.0.0.1", ErrNameTaken},
+		{" ", "10.0.0.1", ErrNameEmpty},
+		{"vpn", " , ", ErrNoAddresses},
+		{"vpn", "10.0.0.1, nope", ErrInvalidNetwork},
+	}
+	for _, tt := range tests {
+		if _, err := AddNetwork(c, tt.name, tt.addrs, true, true); !errors.Is(err, tt.want) {
+			t.Errorf("AddNetwork(%q, %q) = %v, want %v", tt.name, tt.addrs, err, tt.want)
+		}
+	}
+	if err := Validate(c); err != nil {
+		t.Errorf("added network invalid: %v", err)
+	}
+}
+
+func TestSetNetworkAddresses(t *testing.T) {
+	orig, _ := AddNetwork(Defaults(), "lan", "10.0.0.0/8", true, true)
+	c, err := SetNetworkAddresses(orig, "lan", "192.168.0.0/16")
+	if err != nil || !reflect.DeepEqual(c.Networks[0].Addresses, []string{"192.168.0.0/16"}) {
+		t.Errorf("networks = %+v, %v", c.Networks, err)
+	}
+	if orig.Networks[0].Addresses[0] != "10.0.0.0/8" {
+		t.Error("input modified")
+	}
+	if _, err := SetNetworkAddresses(orig, "lan", "bad"); !errors.Is(err, ErrInvalidNetwork) {
+		t.Errorf("bad address: %v", err)
+	}
+	if _, err := SetNetworkAddresses(orig, "nobody", "10.0.0.1"); err == nil {
+		t.Error("unknown network accepted")
+	}
+}
+
+func TestRemoveNetwork(t *testing.T) {
+	c, _ := AddNetwork(Defaults(), "lan", "10.0.0.0/8", true, true)
+	c, _ = AddNetwork(c, "vpn", "10.8.0.0/24", true, true)
+	if c = RemoveNetwork(c, "lan"); len(c.Networks) != 1 || c.Networks[0].Name != "vpn" {
+		t.Errorf("networks = %+v", c.Networks)
+	}
+}

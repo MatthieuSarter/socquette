@@ -40,6 +40,12 @@ name = "alice"
 password_hash = "$2a$10$..."
 http = true
 socks = true
+
+[[networks]]
+name = "lan"
+addresses = ["192.168.1.0/24", "fd00::/8", "203.0.113.7"]
+http = true
+socks = true
 ```
 
 | Key                       | Default   | Meaning                                                                             |
@@ -57,6 +63,17 @@ socks = true
 | `users[].password_hash`   |           | bcrypt hash of the password (the window computes it).                              |
 | `users[].http`            | `false`   | The user may use the HTTP proxy.                                                    |
 | `users[].socks`           | `false`   | The user may use the SOCKS proxy.                                                   |
+| `networks[].name`         |           | Name of a trusted network, unique; shown in the log's `user` column.              |
+| `networks[].addresses`    |           | At least one IP or CIDR subnet, IPv4 or IPv6 (`192.168.1.0/24`, `fd00::/8`); a bare IP is a `/32` or `/128`. |
+| `networks[].http`         | `false`   | Clients from these addresses may use the HTTP proxy without credentials.           |
+| `networks[].socks`        | `false`   | Clients from these addresses may use the SOCKS proxy without credentials.          |
+
+A client that sends no credentials is accepted when its source address is in a trusted network that has the right to
+use the proxy (the first such network, in file order, names it in the log), else when the proxy is anonymous. A client
+that sends credentials is checked on them alone: wrong credentials are refused even from a trusted network. On a
+proxy listening on `::`, IPv4 clients (seen as `::ffff:a.b.c.d`) match the IPv4 entries. The source address is the TCP
+peer's: behind a reverse proxy (see the [user guide](user-guide.md#http-proxy-behind-a-tls-reverse-proxy)), it is the
+reverse proxy's, and `X-Forwarded-For` is not trusted.
 
 The HTTP and SOCKS proxies can't both be enabled on the same address and port. A host name in `advertise_address`
 (e.g. a dynamic DNS name) is resolved at every UDP association, so a changing home IP is followed.

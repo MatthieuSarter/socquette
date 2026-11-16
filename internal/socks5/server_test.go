@@ -34,10 +34,11 @@ type testServer struct {
 	log *lockedWriter
 }
 
-func startServer(t *testing.T, anonymous bool, advertise string) testServer {
+func startServer(t *testing.T, anonymous bool, advertise string, networks ...config.Network) testServer {
 	t.Helper()
 	c := config.Defaults()
 	c.SOCKS.Anonymous = anonymous
+	c.Networks = networks
 	c.Users = []config.User{
 		{Name: userAlice, PasswordHash: testHash, SOCKS: true},
 		{Name: "bob", PasswordHash: testHash, HTTP: true},
@@ -248,6 +249,31 @@ func TestConnectAnonymous(t *testing.T) {
 	}
 	if rep, _ := request(t, c, CmdConnect, tcpEcho(t)); rep != RepSucceeded {
 		t.Fatalf(replyFmt, rep)
+	}
+}
+
+func TestConnectTrustedNetwork(t *testing.T) {
+	s := startServer(t, false, "", config.Network{Name: "lan", Addresses: []string{"127.0.0.0/8", "::1"}, SOCKS: true})
+	c, ok := handshake(t, s.tcp, "", "")
+	if !ok {
+		t.Fatal("client of a trusted network refused")
+	}
+	if rep, _ := request(t, c, CmdConnect, tcpEcho(t)); rep != RepSucceeded {
+		t.Fatalf(replyFmt, rep)
+	}
+	if _, ok := handshake(t, s.tcp, userAlice, "nope"); ok {
+		t.Error("wrong credentials accepted from a trusted network")
+	}
+	time.Sleep(100 * time.Millisecond)
+	if logs := s.log.String(); !strings.Contains(logs, "user=lan") {
+		t.Errorf("logs:\n%s", logs)
+	}
+}
+
+func TestNoAuthRefusedOutsideTrustedNetworks(t *testing.T) {
+	s := startServer(t, false, "", config.Network{Name: "far", Addresses: []string{"192.0.2.0/24"}, SOCKS: true})
+	if _, ok := handshake(t, s.tcp, "", ""); ok {
+		t.Error("client outside the trusted networks accepted")
 	}
 }
 
